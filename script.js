@@ -1,18 +1,20 @@
 'use strict'
 const events = require('events')
 
-const DEFAULT_NUM_ORDERS = 10
+const TEST_RUN = true
+const START_TIME = Date.now()
+const DEFAULT_NUM_ORDERS = TEST_RUN ? 2 : 10
 const MAX_TOPPINGS_COUNT = 14
 
 const FREESTAGE = 'free_stage'
 const FREEORDER = 'free_order'
 
 const StageTypes = {
-   DOUGHCHEF: 0,
-   TOPPINGCHEF: 1,
-   OVEN: 2,
-   WAITER: 3,
-   DONE: 4
+   DOUGHCHEF: 'DoughChef',
+   TOPPINGCHEF: 'ToppingChef',
+   OVEN: 'Oven',
+   WAITER: 'Waiter',
+   DONE: 'Done'
 }
 
 function getRandomToppingsCount() {
@@ -26,15 +28,15 @@ class PrepConfig {
     }
 }
 
-const doughChefConfig = new PrepConfig(StageTypes.DOUGHCHEF, 7)
-const toppingChefConfig = new PrepConfig(StageTypes.TOPPINGCHEF, 4)
-const ovenConfig = new PrepConfig(StageTypes.OVEN, 10)
-const waiterConfig = new PrepConfig(StageTypes.WAITER, 5)
+
+const doughChefConfig = new PrepConfig(StageTypes.DOUGHCHEF, TEST_RUN ? 2: 7)
+const toppingChefConfig = new PrepConfig(StageTypes.TOPPINGCHEF, TEST_RUN ? 1: 4)
+const ovenConfig = new PrepConfig(StageTypes.OVEN, TEST_RUN ? 3: 10)
+const waiterConfig = new PrepConfig(StageTypes.WAITER, TEST_RUN ? 1 : 5)
 
 const allPreps = {}
 const orders = {}
 let ordersSize = 0
-let doneOrdersSize = 0
 
 function onScriptStart () {
     function initPreps (cl, count) {
@@ -54,6 +56,7 @@ function onScriptStart () {
     orders[StageTypes.TOPPINGCHEF] = {}
     orders[StageTypes.OVEN] = {}
     orders[StageTypes.WAITER] = {}
+    orders[StageTypes.DONE] = {}
 }
 
 class Processor {
@@ -127,7 +130,7 @@ class PrepStage extends Processor {
                 return StageTypes.TOPPINGCHEF
             case StageTypes.TOPPINGCHEF:
                 return StageTypes.OVEN
-            case StageTypes.Oven:
+            case StageTypes.OVEN:
                 return StageTypes.WAITER
             case StageTypes.WAITER:
                 return StageTypes.DONE
@@ -175,6 +178,7 @@ class Order extends Processor {
         this.toppingsCount = toppingsCount
         this.stage = StageTypes.DOUGHCHEF
         this.ready = true
+        this.startTime = Date.now()
         this.eventEmitter = new events.EventEmitter()
         this.eventEmitter.addListener(FREEORDER, freeOrderListener)
     }
@@ -192,16 +196,32 @@ class Order extends Processor {
     }
 
     postProcess() {
-        this.ready = true
+        this.logDoneStageProcessing()
 
         const priorStage = this.stage
-        this.stage = PrepStage.getNextStage(priorStage)
+        this.stage = PrepStage.getNextStage(priorStage) 
 
-        if (this.getStage() === StageTypes.DONE) {
-            moveOrder(this, priorStage)
+        if (this.stage === StageTypes.DONE) {
+            this.logDoneAllProcessing()
             return
         }
+        moveOrder(this, priorStage)
+        this.ready = true
+
         this.eventEmitter.emit(FREEORDER, {order: this})
+    }
+
+    toString() {
+        return super.toString() + `, toppingsCount ${this.toppingsCount}`
+    }
+
+    logDoneStageProcessing() {
+        console.log(`Processed stage for ${this}`)
+    }
+
+    logDoneAllProcessing() {
+        const now = Date.now()
+        console.log(`Done processing ${this} with time spent processing: ${now-this.startTime}`)
     }
 }
 
@@ -212,15 +232,13 @@ async function attemptToProcess (order, prepStage) {
     prepStage.preProcess()
     order.preProcess()
 
-    console.log(`Processing order ${order} at prep stage ${prepStage}`)
-
     const time = prepStage.calculateProcessingTime(order)
+
+    console.log(`Processing order ${order} at prep stage ${prepStage} with time to process ${time}`)
     
     await setTimeout(async () => {
         order.postProcess()
         prepStage.postProcess()
-
-        //console.log(`Finished order ${order} at prep stage ${prepStage}`)
 
         return true
     }, time)
@@ -230,15 +248,20 @@ function moveOrder(order, priorStage) {
     delete orders[priorStage][order.id]
     orders[order.getStage()][order.id] = order
 
-    doneOrdersSize++
+    logIfDoneProcessingAll()
+}
 
-    if (doneOrdersSize === ordersSize) {
-        console.log('Done processing orders')
+function logIfDoneProcessingAll() {
+    if (Object.keys(orders[StageTypes.DONE]).length === ordersSize) {
+        const now = Date.now()
+        console.log(
+            `Done processing orders at time ${now}. Time spent processing ${ordersSize} orders: ${now-START_TIME}`
+        )
     }
 }
 
-function initOrders() {
-    for (let i = 1; i < 15; i++) {
+function initOrders(countOrders) {
+    for (let i = 1; i <= countOrders; i++) {
         const order = new Order(i, getRandomToppingsCount())
         orders[order.getStage()][order.id] = order
         ordersSize++
@@ -278,7 +301,7 @@ async function freeOrderListener ({order}) {
 
 onScriptStart()
 
-const orderCount = process.argv.slice(2)[0] || DEFAULT_NUM_ORDERS
+const orderCount = DEFAULT_NUM_ORDERS //process.argv.slice(2)[0] || 
 initOrders(orderCount)
 
 initOrderProcessing()
