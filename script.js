@@ -1,20 +1,19 @@
 'use strict'
 const events = require('events')
 
-const TEST_RUN = true
 const START_TIME = Date.now()
-const DEFAULT_NUM_ORDERS = TEST_RUN ? 2 : 10
+const DEFAULT_NUM_ORDERS = 10
 const MAX_TOPPINGS_COUNT = 14
 
 const FREESTAGE = 'free_stage'
 const FREEORDER = 'free_order'
 
 const StageTypes = {
-   DOUGHCHEF: 'DoughChef',
-   TOPPINGCHEF: 'ToppingChef',
-   OVEN: 'Oven',
-   WAITER: 'Waiter',
-   DONE: 'Done'
+   DOUGHCHEF: 1,
+   TOPPINGCHEF: 2,
+   OVEN: 3,
+   WAITER: 4,
+   DONE: 5
 }
 
 function getRandomToppingsCount() {
@@ -29,10 +28,10 @@ class PrepConfig {
 }
 
 
-const doughChefConfig = new PrepConfig(StageTypes.DOUGHCHEF, TEST_RUN ? 2: 7)
-const toppingChefConfig = new PrepConfig(StageTypes.TOPPINGCHEF, TEST_RUN ? 1: 4)
-const ovenConfig = new PrepConfig(StageTypes.OVEN, TEST_RUN ? 3: 10)
-const waiterConfig = new PrepConfig(StageTypes.WAITER, TEST_RUN ? 1 : 5)
+const doughChefConfig = new PrepConfig(StageTypes.DOUGHCHEF, 7)
+const toppingChefConfig = new PrepConfig(StageTypes.TOPPINGCHEF, 4)
+const ovenConfig = new PrepConfig(StageTypes.OVEN, 10)
+const waiterConfig = new PrepConfig(StageTypes.WAITER, 5)
 
 const allPreps = {}
 const orders = {}
@@ -196,15 +195,10 @@ class Order extends Processor {
     }
 
     postProcess() {
-        this.logDoneStageProcessing()
-
         const priorStage = this.stage
         this.stage = PrepStage.getNextStage(priorStage) 
 
-        if (this.stage === StageTypes.DONE) {
-            this.logDoneAllProcessing()
-            return
-        }
+        this.logIfDoneProcessing()
         moveOrder(this, priorStage)
         this.ready = true
 
@@ -215,13 +209,11 @@ class Order extends Processor {
         return super.toString() + `, toppingsCount ${this.toppingsCount}`
     }
 
-    logDoneStageProcessing() {
-        console.log(`Processed stage for ${this}`)
-    }
-
-    logDoneAllProcessing() {
-        const now = Date.now()
-        console.log(`Done processing ${this} with time spent processing: ${now-this.startTime}`)
+    logIfDoneProcessing() {
+        if (this.stage === StageTypes.DONE) {
+            const now = Date.now()
+            console.log(`Done processing ${this} with time spent processing: ${now-this.startTime}`)
+        }
     }
 }
 
@@ -289,6 +281,10 @@ async function freeStageListener ({prepStage}) {
 }
 
 async function freeOrderListener ({order}) {
+    if (order.stage === StageTypes.DONE) {
+        return
+    }
+
     const prepsAtStage = allPreps[order.getStage()]
 
     for (let i in prepsAtStage) {
@@ -301,7 +297,6 @@ async function freeOrderListener ({order}) {
 
 onScriptStart()
 
-const orderCount = DEFAULT_NUM_ORDERS //process.argv.slice(2)[0] || 
+const orderCount = process.argv.slice(2)[0] || DEFAULT_NUM_ORDERS
 initOrders(orderCount)
-
 initOrderProcessing()
