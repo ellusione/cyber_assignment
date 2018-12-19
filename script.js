@@ -58,22 +58,24 @@ function onScriptStart () {
     orders[StageTypes.DONE] = {}
 }
 
-class Processor {
+class Processor extends events.EventEmitter {
     
     constructor(id) {
+        super()
         this.id = id
+        this.ready = true
     }
 
-    preProcess() {
-        throw new Error('Implementation required')
+    disableReady() {
+        this.ready = false
     }
 
-    postProcess() {
-        throw new Error('Implementation required')
+    enableReady() {
+        this.ready = true
     }
 
     isReady() {
-        throw new Error('Implementation required')
+        return this.ready
     }
 
     getStage() {
@@ -84,37 +86,25 @@ class Processor {
         return `${this.constructor.name}:${this.id} stage ${this.getStage()}`
     }
 }
+
 class PrepStage extends Processor {
-    constructor (id) {
+
+    constructor(id) {
         super(id)
-        this.startTime = null
-        this.eventEmitter = new events.EventEmitter()
-        this.eventEmitter.addListener(FREESTAGE, freeStageListener);
+        this.addListener(FREESTAGE, freeStageListener)
     }
 
     static getConfig () {
         throw new Error('Implementation required')
     }
 
-    preProcess() {
-        this.startTime = Date.now()
-    }
-
     postProcess() {
-        this.startTime = null
-        this.eventEmitter.emit(FREESTAGE, {prepStage: this})
-    }
-
-    isReady() {
-        return !this.startTime
+        this.enableReady()
+        this.emit(FREESTAGE, {prepStage: this})
     }
 
     getStage() {
         return this.constructor.getConfig().stageType
-    }
-
-    toString() {
-        return super.toString() + `, startTime ${this.startTime}`
     }
 
     calculateProcessingTime () {
@@ -176,22 +166,12 @@ class Order extends Processor {
         super(id)
         this.toppingsCount = toppingsCount
         this.stage = StageTypes.DOUGHCHEF
-        this.ready = true
         this.startTime = Date.now()
-        this.eventEmitter = new events.EventEmitter()
-        this.eventEmitter.addListener(FREEORDER, freeOrderListener)
-    }
-
-    isReady() {
-        return this.ready
+        this.addListener(FREEORDER, freeOrderListener)
     }
 
     getStage() {
         return this.stage
-    }
-
-    preProcess() {
-        this.ready = false
     }
 
     postProcess() {
@@ -200,9 +180,9 @@ class Order extends Processor {
 
         this.logIfDoneProcessing()
         moveOrder(this, priorStage)
-        this.ready = true
 
-        this.eventEmitter.emit(FREEORDER, {order: this})
+        this.enableReady()
+        this.emit(FREEORDER, {order: this})
     }
 
     toString() {
@@ -221,10 +201,11 @@ async function attemptToProcess (order, prepStage) {
     const canProcess = order.isReady() && prepStage.isReady() && order.getStage() === prepStage.getStage()
     if (!canProcess) return false
 
-    prepStage.preProcess()
-    order.preProcess()
-
     const time = prepStage.calculateProcessingTime(order)
+    if (!time) return false
+
+    prepStage.disableReady()
+    order.disableReady()
 
     console.log(`Processing order ${order} at prep stage ${prepStage} with time to process ${time}`)
     
@@ -270,7 +251,6 @@ async function initOrderProcessing() {
 
 async function freeStageListener ({prepStage}) {
     const ordersAtStage = orders[prepStage.getStage()]
-    if (ordersAtStage.length === 0) return 
 
     for (let i in ordersAtStage) {
         const order = ordersAtStage[i]
