@@ -113,8 +113,6 @@ class PrepStage extends Processor {
 
     static getNextStage(stageType) {
         switch (stageType) {
-            case null: 
-                return StageTypes.DOUGHCHEF
             case StageTypes.DOUGHCHEF:
                 return StageTypes.TOPPINGCHEF
             case StageTypes.TOPPINGCHEF:
@@ -202,6 +200,9 @@ async function attemptToProcess (order, prepStage) {
     if (!canProcess) return false
 
     const time = prepStage.calculateProcessingTime(order)
+    /*
+    relevant in ToppingChef stage if the pizza has 0 toppings. Optional return -- this is equivalent to continuing processing the stage as usual (setTimeout will resolve immediately). An alternative approach could also be to implement this check in an override isReady function on the ToppingChef
+    */
     if (!time) return false
 
     prepStage.disableReady()
