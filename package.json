@@ -1,0 +1,14 @@
+{
+    "dependencies": {
+        "sequelize": "^4.42.0"
+    },
+    "scripts": {
+        "run": "node script.js",
+        "debug": "node --nolazy --inspect-brk=9229 script.js"
+    },
+    "devDependencies": {
+        "enum": "^2.5.0",
+        "eslint": "^5.10.0",
+        "events": "^3.0.0"
+    }
+}
